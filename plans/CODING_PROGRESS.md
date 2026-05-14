@@ -192,3 +192,68 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 3 should begin scraper/parser work only after explicit approval.
+
+## Phase 3 - Scraping Source Config, Parser, and Ingestion
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only XSMB source configuration, safe HTTP fetching, static HTML
+  parsing, and small ingestion integration.
+- No features, ML, backtest, API, dashboard, Docker, scheduler, broad crawling,
+  or Phase 4 work was implemented.
+
+Implemented:
+- Fast-forwarded `feat/phase-3-scraper-parser` onto merged Phase 2 code from
+  `origin/main` before starting Phase 3.
+- Added `XSMBSourceConfig`, `get_default_xsmb_source()`, and
+  `build_result_url()`.
+- Added safe `fetch_url()` with timeout, clear User-Agent, two-attempt retry
+  behavior, small backoff, and `FetchError`.
+- Added `parse_xsmb_result_html()` for static XSMB HTML strings.
+- Parser emits Phase 1-compatible rows:
+  `draw_date`, `prize_tier`, zero-based `prize_index`, `winning_number`.
+- Parser preserves leading zeros and validates final output with
+  `validate_draw_results()`.
+- Parser fails clearly for missing tier sections, wrong counts, wrong lengths,
+  duplicate/malformed sections, and empty HTML.
+- Added `ingest_xsmb_html()` to save raw HTML, create/get draw, save 27 prizes,
+  and optionally generate all three target types using Phase 2 repositories.
+- Ingestion is idempotent for same raw checksum, draw date, prize rows, and
+  generated target rows.
+- Added static fixture `tests/fixtures/xsmb_sample_result.html` with nested tags
+  and leading-zero examples.
+
+Tests:
+- Added parser fixture tests for 27 rows, leading zeros, tier mapping,
+  validation compatibility, missing special prize, wrong prize count, wrong
+  number length, and duplicate sections.
+- Added crawler tests using mocked `requests.get`; no live network is used.
+- Added ingestion tests using temporary SQLite only.
+- Added ingestion tests for raw page, draw, prize persistence, all target types,
+  special-prize-only target extraction, and idempotency.
+
+Commands run:
+- `git merge --ff-only origin/main`
+  - Result: Phase 3 branch fast-forwarded to merged Phase 2 base.
+- `python3 -m pytest tests/test_parser.py -q`
+  - Result: 8 passed.
+- `python3 -m pytest tests/test_crawler.py -q`
+  - Result: 4 passed.
+- `python3 -m pytest tests/test_ingestion.py -q`
+  - Result: 3 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 63 passed.
+
+Blockers and assumptions:
+- No blockers.
+- Parser fixture uses explicit `data-prize-tier` and `data-winning-number`
+  attributes, with fallback parsing for whitespace/nested markup.
+- Crawler tests use mocks only and do not contact live websites.
+- Ingestion leaves transaction commit control to the caller/session.
+- Tests used temporary SQLite databases only.
+
+Recommended next phase:
+- Phase 4 should build target-processing orchestration or next approved scope
+  only after explicit approval.

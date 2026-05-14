@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xsmb-ml-system"
+version = "0.1.0"
+description = "XSMB Machine Learning System"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "beautifulsoup4",
+    "requests",
+    "streamlit",
+    "python-dotenv",
+    "pydantic",
+    "pytest"
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "flake8",
+    "mypy"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["xsmb*"]

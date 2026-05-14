@@ -369,3 +369,63 @@ Blockers and assumptions:
 Recommended next phase:
 - Phase 6 should implement ML training/prediction models only after explicit
   approval.
+
+## Phase 6 - ML Training and Prediction
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only ML training, prediction, and artifact utilities.
+- No CLI, FastAPI, Streamlit dashboard, Docker, scheduler, broad crawling, or
+  Phase 7 work was implemented.
+
+Implemented:
+- Added supported ML models: `logistic_regression`, `random_forest`, and
+  `hist_gradient_boosting` when available in sklearn.
+- Added `train_model()` with target-type validation, model-name validation,
+  numeric feature selection, explicit feature-column support, one-class checks,
+  deterministic random state, and sklearn pipelines.
+- Added logistic regression with imputation/scaling and balanced class weights.
+- Added random forest and hist-gradient boosting training with deterministic
+  defaults.
+- Added safe calibration for tree models only when enough positive/negative
+  samples exist; metadata records whether calibration was used.
+- Added `predict_probabilities()` with exact feature-column usage, target-type
+  filtering, optional target-date filtering, top-k filtering, probability
+  clipping, per-date ranking, and lexicographic tie-breaking.
+- Added artifact helpers `save_model_artifact()` and `load_model_artifact()`
+  using pickle.
+- Added `.gitignore` entries for Python bytecode and generated model artifacts.
+- Exported Phase 6 helpers from `xsmb.models`.
+
+Tests:
+- Added deterministic synthetic ML tests for logistic regression, random forest,
+  and hist-gradient boosting availability/graceful behavior.
+- Added validation tests for unsupported models, empty data, one-class data,
+  missing labels, and no numeric features.
+- Added prediction tests for required columns, valid probabilities, rank starts
+  at 1, lexicographic tie-breaks, top-k filtering, target-date filtering, and
+  leading-zero preservation for `00`, `05`, and `008`.
+- Added artifact roundtrip tests using a temporary directory only.
+- Added integration tests for all target types and Phase 5 evaluation
+  compatibility.
+- Added guard that ML training/prediction does not create the real SQLite DB.
+
+Commands run:
+- `python3 -m pytest tests/test_ml_train_predict.py -q`
+  - Result: 21 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 120 passed.
+- `grep -RInE "guaranteed|sure win|high accuracy guarantee|chắc chắn ra|kèo chắc" README.md xsmb app tests plans 2>/dev/null || true`
+  - Result: found only disclaimer/checklist references in planning docs.
+
+Blockers and assumptions:
+- No blockers.
+- sklearn is available locally (`1.8.0`), including
+  `HistGradientBoostingClassifier`.
+- Tests use synthetic data only and do not require DB writes or network access.
+- Generated model artifacts are not committed; artifact tests use temp dirs.
+
+Recommended next phase:
+- Phase 7 should implement CLI/API integration only after explicit approval.

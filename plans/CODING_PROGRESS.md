@@ -429,3 +429,63 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 7 should implement CLI/API integration only after explicit approval.
+
+## Phase 7A - CLI Skeleton with argparse
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only CLI argument parsing and MVP stub handlers.
+- No FastAPI, Streamlit dashboard, Docker, scheduler, broad crawling, network
+  requests, or real database writes were implemented.
+
+Implemented:
+- Added `app/__init__.py` to make `app` a proper Python package.
+- Added `app/main.py` with `main(argv=None) -> int` entry point.
+- Added `build_parser()` with six subcommands: `scrape`, `process`,
+  `build-features`, `backtest`, `train`, `predict`.
+- All subcommands validate arguments via `argparse.choices` for target types
+  and model names.
+- Added `--start-date`/`--end-date` validation (YYYY-MM-DD format, real
+  calendar dates).
+- Added `--top-k` positive-integer validation.
+- Target type choices use `xsmb.config.TARGET_TYPES`.
+- Backtest model choices use `SUPPORTED_BASELINES`.
+- Train model choices use `SUPPORTED_ML_MODELS`.
+- All handlers print safe MVP stub messages and return exit code 0.
+- No network requests are made.
+- No database is created or modified.
+- Module is runnable via `python -m app.main`.
+
+Tests:
+- Added `tests/test_cli.py` with 37 tests covering:
+  - Top-level help exits 0.
+  - No-command returns 1.
+  - Per-subcommand help exits 0.
+  - Invalid target_type rejection (argparse exit code 2).
+  - All valid target types accepted for build-features.
+  - top_k zero/negative/non-integer rejection.
+  - top_k positive acceptance.
+  - Invalid date format rejection.
+  - Impossible calendar date rejection.
+  - Valid date acceptance for scrape and process.
+  - MVP stub messages in stdout for all six commands.
+  - No real database creation guard.
+  - Invalid model names rejected for backtest and train.
+  - Leading-zero preservation of target type strings.
+  - Module runnable via subprocess (`--help` and no-args).
+
+Commands run:
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 37 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 157 passed (120 existing + 37 new).
+
+Blockers and assumptions:
+- No blockers.
+- All command handlers are MVP stubs only.
+- FastAPI endpoints are deferred to Phase 7B.
+
+Recommended next phase:
+- Phase 7B should implement FastAPI endpoints only after explicit approval.

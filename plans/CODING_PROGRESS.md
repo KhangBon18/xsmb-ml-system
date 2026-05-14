@@ -488,4 +488,72 @@ Blockers and assumptions:
 - FastAPI endpoints are deferred to Phase 7B.
 
 Recommended next phase:
-- Phase 7B should implement FastAPI endpoints only after explicit approval.
+- Phase 7B should wire CLI commands to real Phase 4/5/6 functions via CSV.
+
+## Phase 7B - CLI Wiring to Pure Functions via CSV I/O
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only CSV-based wiring for backtest, train, and predict CLI
+  commands to existing Phase 4/5/6 pure functions.
+- No FastAPI, Streamlit dashboard, Docker, scheduler, broad crawling, or
+  live network requests implemented.
+- No real database created or modified.
+
+Implemented:
+- Added `--history-csv` to `backtest` subcommand; when present, reads CSV
+  with pandas and calls `run_walk_forward_backtest()` + `summarize_backtest_result()`,
+  printing summary JSON to stdout.
+- Added `--features-csv` and `--artifact-dir` to `train` subcommand; when
+  `--features-csv` is present, reads CSV with pandas, calls `train_model()` +
+  `save_model_artifact()`, and prints JSON with artifact_path/model_name/
+  target_type/row_count.
+- Added `--features-csv` and `--artifact` to `predict` subcommand; when both
+  are present, loads artifact with `load_model_artifact()`, reads CSV, calls
+  `predict_probabilities()`, and prints JSON prediction records.
+- Added `_read_csv_safe()` helper that forces `candidate_number`, `draw_date`,
+  `target_date`, and `target_type` columns to string dtype on read, preserving
+  leading zeros.
+- Without new CSV arguments, all three commands retain safe MVP stub messages.
+- Missing/invalid CSV or artifact paths raise clear `SystemExit` errors.
+
+Tests:
+- Updated `tests/test_cli.py` from 37 → 51 tests. Added 14 Phase 7B tests:
+  - Backtest with synthetic history CSV prints summary JSON with brier_score.
+  - Backtest without CSV stays MVP stub.
+  - Backtest with missing CSV fails clearly.
+  - Train with synthetic feature CSV saves artifact to temp dir.
+  - Train without CSV stays MVP stub.
+  - Train with missing CSV fails clearly.
+  - Predict with temp artifact + feature CSV prints prediction JSON.
+  - Predict without CSV stays MVP stub.
+  - Predict without artifact stays MVP stub.
+  - Predict with missing artifact fails clearly.
+  - Predict with missing features CSV fails clearly.
+  - CLI predict preserves "00" and "05" as 2-char strings (loto_2d_all_prizes).
+  - CLI predict preserves "008" and "000" as 3-char strings (db_3cang).
+  - Wired commands do not create the real SQLite database.
+- Synthetic data uses deterministic DataFrames with 40+ dates for backtest
+  and both positive/negative labels for train/predict.
+- Feature columns include: freq_7, freq_14, freq_30, freq_60, freq_90,
+  freq_180, hit_count_sum_30, current_gap, days_since_last_seen,
+  max_gap_before_target, avg_gap_before_target, rolling_hit_rate_30,
+  rolling_hit_rate_90.
+
+Commands run:
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 171 passed (120 existing + 51 CLI).
+
+Blockers and assumptions:
+- No blockers.
+- CSV reading uses pandas `dtype={col: str}` to preserve leading zeros on
+  candidate_number and date columns.
+- All tests use temporary directories only; no real DB or network is touched.
+- scrape, process, and build-features remain MVP stubs.
+
+Recommended next phase:
+- Phase 7C should implement FastAPI endpoints only after explicit approval.

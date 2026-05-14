@@ -4,16 +4,21 @@ Usage examples:
     python -m app.main scrape --start-date 2024-01-01 --end-date 2024-01-31
     python -m app.main process --start-date 2024-01-01 --end-date 2024-01-31
     python -m app.main build-features --target-type loto_2d_all_prizes
-    python -m app.main backtest --target-type loto_2d_all_prizes --model frequency_30
-    python -m app.main train --target-type loto_2d_all_prizes --model logistic_regression
-    python -m app.main predict --target-date 2024-02-01 --target-type db_3cang --top-k 20
+    python -m app.main backtest --target-type loto_2d_all_prizes --model frequency_30 --history-csv data.csv
+    python -m app.main train --target-type loto_2d_all_prizes --model logistic_regression --features-csv feat.csv --artifact-dir tmp/models
+    python -m app.main predict --target-date 2024-02-01 --target-type db_3cang --top-k 20 --features-csv feat.csv --artifact model.pkl
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 import sys
+from pathlib import Path
 from typing import Optional, Sequence
+
+import pandas as pd
 
 from xsmb.config import TARGET_TYPES
 from xsmb.models.baseline import SUPPORTED_BASELINES
@@ -99,6 +104,10 @@ def _add_backtest_parser(subparsers: argparse._SubParsersAction) -> None:
         "--model", required=True, choices=sorted(SUPPORTED_BASELINES),
         help="Baseline model name",
     )
+    parser.add_argument(
+        "--history-csv", default=None,
+        help="Path to history CSV (columns: draw_date, target_type, candidate_number, label, hit_count)",
+    )
 
 
 def _add_train_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -112,6 +121,14 @@ def _add_train_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--model", required=True, choices=sorted(SUPPORTED_ML_MODELS),
         help="ML model name",
+    )
+    parser.add_argument(
+        "--features-csv", default=None,
+        help="Path to feature dataset CSV",
+    )
+    parser.add_argument(
+        "--artifact-dir", default="data/models",
+        help="Directory to save trained model artifact (default: data/models)",
     )
 
 
@@ -130,6 +147,14 @@ def _add_predict_parser(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--top-k", type=int, default=20,
         help="Number of top candidates to return (default: 20)",
+    )
+    parser.add_argument(
+        "--features-csv", default=None,
+        help="Path to feature dataset CSV for prediction",
+    )
+    parser.add_argument(
+        "--artifact", default=None,
+        help="Path to trained model artifact (.pkl)",
     )
 
 
@@ -160,7 +185,31 @@ def _validate_top_k(value: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Command handlers (MVP stubs — no network, no real DB)
+# CSV I/O helpers
+# ---------------------------------------------------------------------------
+
+_STRING_COLUMNS = {"candidate_number", "draw_date", "target_date", "target_type"}
+
+logger = logging.getLogger(__name__)
+
+
+def _read_csv_safe(csv_path: str) -> pd.DataFrame:
+    """Read a CSV ensuring candidate_number and similar columns stay as strings."""
+    path = Path(csv_path)
+    if not path.exists():
+        raise SystemExit(f"Error: CSV file not found: {csv_path!r}")
+    try:
+        df = pd.read_csv(path, dtype={col: str for col in _STRING_COLUMNS})
+    except Exception as exc:
+        raise SystemExit(f"Error: failed to read CSV {csv_path!r}: {exc}") from exc
+    # Ensure candidate_number is always string with leading zeros preserved.
+    if "candidate_number" in df.columns:
+        df["candidate_number"] = df["candidate_number"].astype(str)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Command handlers (MVP stubs + CSV-wired modes)
 # ---------------------------------------------------------------------------
 
 def _handle_scrape(args: argparse.Namespace) -> int:
@@ -189,16 +238,44 @@ def _handle_build_features(args: argparse.Namespace) -> int:
 def _handle_backtest(args: argparse.Namespace) -> int:
     target_type: str = args.target_type
     model: str = args.model
-    print(f"[backtest] Would run walk-forward backtest: target_type={target_type!r}, model={model!r}.")
-    print("[backtest] MVP stub — no backtest executed.")
+
+    if args.history_csv is None:
+        print(f"[backtest] Would run walk-forward backtest: target_type={target_type!r}, model={model!r}.")
+        print("[backtest] MVP stub — no backtest executed.")
+        return 0
+
+    from xsmb.models.backtest import run_walk_forward_backtest, summarize_backtest_result
+
+    history_df = _read_csv_safe(args.history_csv)
+    result = run_walk_forward_backtest(
+        history_df, target_type=target_type, model_name=model,
+    )
+    summary = summarize_backtest_result(result)
+    print(json.dumps(summary, indent=2, default=str))
     return 0
 
 
 def _handle_train(args: argparse.Namespace) -> int:
     target_type: str = args.target_type
     model: str = args.model
-    print(f"[train] Would train model: target_type={target_type!r}, model={model!r}.")
-    print("[train] MVP stub — no model trained.")
+
+    if args.features_csv is None:
+        print(f"[train] Would train model: target_type={target_type!r}, model={model!r}.")
+        print("[train] MVP stub — no model trained.")
+        return 0
+
+    from xsmb.models.train import save_model_artifact, train_model
+
+    feature_df = _read_csv_safe(args.features_csv)
+    trained = train_model(feature_df, target_type=target_type, model_name=model)
+    artifact_path = save_model_artifact(trained, artifact_dir=args.artifact_dir)
+    output = {
+        "artifact_path": artifact_path,
+        "model_name": trained["model_name"],
+        "target_type": trained["target_type"],
+        "row_count": trained["row_count"],
+    }
+    print(json.dumps(output, indent=2))
     return 0
 
 
@@ -206,11 +283,36 @@ def _handle_predict(args: argparse.Namespace) -> int:
     target_date = _validate_date(args.target_date, "--target-date")
     target_type: str = args.target_type
     top_k = _validate_top_k(args.top_k)
-    print(
-        f"[predict] Would predict: target_date={target_date}, "
-        f"target_type={target_type!r}, top_k={top_k}."
+
+    features_csv = getattr(args, "features_csv", None)
+    artifact_path = getattr(args, "artifact", None)
+
+    if features_csv is None or artifact_path is None:
+        print(
+            f"[predict] Would predict: target_date={target_date}, "
+            f"target_type={target_type!r}, top_k={top_k}."
+        )
+        print("[predict] MVP stub — no prediction generated.")
+        return 0
+
+    from xsmb.models.predict import predict_probabilities
+    from xsmb.models.train import load_model_artifact
+
+    if not Path(artifact_path).exists():
+        raise SystemExit(f"Error: artifact file not found: {artifact_path!r}")
+
+    trained_model = load_model_artifact(artifact_path)
+    feature_df = _read_csv_safe(features_csv)
+    predictions = predict_probabilities(
+        trained_model,
+        feature_df,
+        target_date=target_date,
+        top_k=top_k,
     )
-    print("[predict] MVP stub — no prediction generated.")
+    # Ensure candidate_number strings are preserved (leading zeros).
+    predictions["candidate_number"] = predictions["candidate_number"].astype(str)
+    records = predictions.to_dict(orient="records")
+    print(json.dumps(records, indent=2, default=str))
     return 0
 
 

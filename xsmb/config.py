@@ -6,6 +6,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
+DEFAULT_DATABASE_URL = "sqlite:///data/xsmb.sqlite3"
+DATABASE_URL_ENV_VAR = "DATABASE_URL"
 
 PRIZE_SPECS: dict[str, dict[str, int]] = {
     "special": {"count": 1, "length": 5},

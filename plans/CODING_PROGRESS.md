@@ -707,3 +707,72 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 8: Frontend / Streamlit Dashboard implementation.
+
+## Phase 8 - Streamlit Dashboard MVP
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only a simple local Streamlit dashboard and pure dashboard helper
+  functions.
+- No Docker, scheduler, broad crawling, production deployment config, live API
+  calls, network access, or real database creation was implemented.
+- Core Phase 1-7 logic was not rewritten.
+
+Implemented:
+- Added `xsmb/dashboard/__init__.py` exports for dashboard helpers.
+- Added import-safe `xsmb/dashboard/streamlit_app.py`.
+- Added pure helper functions:
+  - `validate_prediction_columns()`
+  - `prepare_predictions_table()`
+  - `prepare_probability_distribution()`
+  - `prepare_topk_summary()`
+  - `prepare_calibration_table()`
+- Dashboard reads local uploaded files only:
+  - predictions CSV
+  - backtest summary JSON/CSV
+  - calibration CSV
+- Dashboard includes target type selector, top-k input, predictions table,
+  probability distribution chart, optional calibration display, optional top-k
+  performance comparison, and the required statistical disclaimer.
+- Helpers preserve `candidate_number` as string and keep leading-zero values
+  such as `"00"`, `"05"`, and `"008"` unchanged.
+- Helpers copy caller DataFrames before transformation and raise clear
+  `ValueError` messages for missing columns or invalid `top_k`.
+
+Tests:
+- Added `tests/test_dashboard.py` with dashboard helper coverage:
+  - Module imports without launching Streamlit.
+  - Prediction table expected columns.
+  - Leading-zero preservation for `"00"`, `"05"`, and `"008"`.
+  - Positive `top_k` filtering.
+  - `target_type` filtering.
+  - Input DataFrame mutation guard.
+  - Missing required column validation.
+  - Invalid `top_k` validation.
+  - Deterministic probability distribution bucket counts.
+  - Calibration table expected-column preservation.
+  - Top-k summary extraction from backtest metrics.
+  - No real DB creation.
+  - No network socket use by pure helpers.
+
+Commands run:
+- `python3 -m pytest tests/test_dashboard.py -q`
+  - Result: 13 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 205 passed.
+- `grep -RInE "sure win|high accuracy guarantee|chắc chắn ra|kèo chắc" README.md xsmb app tests plans 2>/dev/null || true`
+  - Result: only checklist/command references in `plans/CODING_PROGRESS.md`; no implementation or README claims found.
+- `git diff --check`
+  - Result: passed with no whitespace errors.
+
+Blockers and assumptions:
+- No blockers.
+- Streamlit remains optional at dashboard module import time; the UI runner
+  returns `False` if Streamlit is unavailable.
+- Uploaded CSV reading in the UI explicitly reads `candidate_number` as string.
+
+Recommended final quality gate:
+- Before merging, review the four Phase 8 source/test/doc files and ignore
+  unrelated pre-existing generated `__pycache__` status noise.

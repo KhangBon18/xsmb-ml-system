@@ -14,6 +14,8 @@ try:
         BacktestResponse,
         HealthResponse,
         TargetsResponse,
+        PredictRequest,
+        PredictResponse,
     )
     from xsmb.models.backtest import run_walk_forward_backtest
     
@@ -66,6 +68,63 @@ try:
             "model_name": result["model_name"],
             "summary": result["summary"],
             "prediction_count": len(result["predictions"]),
+        }
+
+    @router.post("/predict", response_model=PredictResponse)
+    def run_predict(request: PredictRequest) -> dict[str, Any]:
+        import pathlib
+
+        if request.target_type not in TARGET_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unsupported target_type: {request.target_type}")
+        if request.top_k <= 0:
+            raise HTTPException(status_code=400, detail="top_k must be > 0")
+        if not request.features:
+            raise HTTPException(status_code=400, detail="features must not be empty")
+
+        artifact_path = pathlib.Path(request.artifact_path)
+        if not artifact_path.exists():
+            raise HTTPException(status_code=400, detail=f"artifact_path not found: {request.artifact_path}")
+
+        from xsmb.models.train import load_model_artifact
+        from xsmb.models.predict import predict_probabilities
+
+        try:
+            trained_model = load_model_artifact(artifact_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to load artifact: {e}")
+
+        if trained_model["target_type"] != request.target_type:
+            raise HTTPException(status_code=400, detail="Artifact target_type does not match request target_type")
+
+        # Convert to DataFrame
+        feature_df = pd.DataFrame(request.features)
+        
+        # Ensure candidate_number is string
+        if "candidate_number" in feature_df.columns:
+            feature_df["candidate_number"] = feature_df["candidate_number"].astype(str)
+
+        try:
+            predictions_df = predict_probabilities(
+                trained_model,
+                feature_df,
+                target_date=request.target_date,
+                top_k=request.top_k,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        # Ensure candidate_number is preserved as string
+        predictions_df["candidate_number"] = predictions_df["candidate_number"].astype(str)
+
+        # Drop labels and hit_counts if present
+        output_cols = ["candidate_number", "probability", "rank"]
+        compact_preds = predictions_df[output_cols].to_dict(orient="records")
+
+        return {
+            "target_date": request.target_date,
+            "target_type": request.target_type,
+            "model_name": trained_model["model_name"],
+            "predictions": compact_preds,
         }
 
 except ImportError:

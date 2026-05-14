@@ -655,3 +655,55 @@ Blockers and assumptions:
 Recommended next phase:
 - Phase 7E should implement `POST /predict` endpoint only after explicit approval.
 
+## Phase 7E - FastAPI POST /predict Endpoint
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented `POST /predict` endpoint only.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+
+Implemented:
+- `xsmb/api/schemas.py`: Added Pydantic schemas `PredictRequest`, `PredictionRow`,
+  and `PredictResponse`. Features are accepted as `List[dict[str, Any]]` to flexibly
+  support variable model feature requirements.
+- `xsmb/api/routes.py`: Added `POST /predict` endpoint.
+  - Validates `target_type` against `TARGET_TYPES`.
+  - Validates `top_k > 0`.
+  - Validates `features` is not empty.
+  - Validates `artifact_path` exists.
+  - Loads model artifact with `load_model_artifact()`.
+  - Checks if artifact `target_type` matches request `target_type`.
+  - Converts request features to pandas DataFrame and explicitly forces `candidate_number` to string to preserve leading zeros forever.
+  - Calls pure function `predict_probabilities()`.
+  - Limits output to `candidate_number`, `probability`, and `rank` to keep response compact.
+
+Tests:
+- Updated `tests/test_api.py`.
+- Tested `POST /predict` using generated artifacts and synthetic feature sets.
+  - Valid payload returns HTTP 200 with probability and rank.
+  - Limits predictions strictly by `top_k`.
+  - Leading-zero preservation successfully tested for `loto_2d_all_prizes` ("00", "05") and `db_3cang` ("008").
+  - Empty features return 422.
+  - Missing artifact path returns 422, non-existent artifact path returns 400.
+  - Mismatched artifact `target_type` returns 400.
+  - Invalid `top_k` returns 422.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 21 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 192 passed (183 existing + 9 new API tests).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed.
+
+Blockers and assumptions:
+- No blockers.
+- The system is now fully functional across both CLI and FastAPI boundaries without network/DB dependencies.
+
+Recommended next phase:
+- Phase 8: Frontend / Streamlit Dashboard implementation.

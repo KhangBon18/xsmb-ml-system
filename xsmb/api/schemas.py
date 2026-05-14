@@ -39,3 +39,21 @@ class BacktestResponse(BaseModel):
     model_name: str
     summary: dict[str, Any]
     prediction_count: int
+
+class PredictRequest(BaseModel):
+    target_date: str
+    target_type: str
+    top_k: int = 20
+    artifact_path: str
+    features: List[dict[str, Any]]
+
+class PredictionRow(BaseModel):
+    candidate_number: str
+    probability: float
+    rank: int
+
+class PredictResponse(BaseModel):
+    target_date: str
+    target_type: str
+    model_name: str
+    predictions: List[PredictionRow]

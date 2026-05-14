@@ -429,3 +429,281 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 7 should implement CLI/API integration only after explicit approval.
+
+## Phase 7A - CLI Skeleton with argparse
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only CLI argument parsing and MVP stub handlers.
+- No FastAPI, Streamlit dashboard, Docker, scheduler, broad crawling, network
+  requests, or real database writes were implemented.
+
+Implemented:
+- Added `app/__init__.py` to make `app` a proper Python package.
+- Added `app/main.py` with `main(argv=None) -> int` entry point.
+- Added `build_parser()` with six subcommands: `scrape`, `process`,
+  `build-features`, `backtest`, `train`, `predict`.
+- All subcommands validate arguments via `argparse.choices` for target types
+  and model names.
+- Added `--start-date`/`--end-date` validation (YYYY-MM-DD format, real
+  calendar dates).
+- Added `--top-k` positive-integer validation.
+- Target type choices use `xsmb.config.TARGET_TYPES`.
+- Backtest model choices use `SUPPORTED_BASELINES`.
+- Train model choices use `SUPPORTED_ML_MODELS`.
+- All handlers print safe MVP stub messages and return exit code 0.
+- No network requests are made.
+- No database is created or modified.
+- Module is runnable via `python -m app.main`.
+
+Tests:
+- Added `tests/test_cli.py` with 37 tests covering:
+  - Top-level help exits 0.
+  - No-command returns 1.
+  - Per-subcommand help exits 0.
+  - Invalid target_type rejection (argparse exit code 2).
+  - All valid target types accepted for build-features.
+  - top_k zero/negative/non-integer rejection.
+  - top_k positive acceptance.
+  - Invalid date format rejection.
+  - Impossible calendar date rejection.
+  - Valid date acceptance for scrape and process.
+  - MVP stub messages in stdout for all six commands.
+  - No real database creation guard.
+  - Invalid model names rejected for backtest and train.
+  - Leading-zero preservation of target type strings.
+  - Module runnable via subprocess (`--help` and no-args).
+
+Commands run:
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 37 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 157 passed (120 existing + 37 new).
+
+Blockers and assumptions:
+- No blockers.
+- All command handlers are MVP stubs only.
+- FastAPI endpoints are deferred to Phase 7B.
+
+Recommended next phase:
+- Phase 7B should wire CLI commands to real Phase 4/5/6 functions via CSV.
+
+## Phase 7B - CLI Wiring to Pure Functions via CSV I/O
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only CSV-based wiring for backtest, train, and predict CLI
+  commands to existing Phase 4/5/6 pure functions.
+- No FastAPI, Streamlit dashboard, Docker, scheduler, broad crawling, or
+  live network requests implemented.
+- No real database created or modified.
+
+Implemented:
+- Added `--history-csv` to `backtest` subcommand; when present, reads CSV
+  with pandas and calls `run_walk_forward_backtest()` + `summarize_backtest_result()`,
+  printing summary JSON to stdout.
+- Added `--features-csv` and `--artifact-dir` to `train` subcommand; when
+  `--features-csv` is present, reads CSV with pandas, calls `train_model()` +
+  `save_model_artifact()`, and prints JSON with artifact_path/model_name/
+  target_type/row_count.
+- Added `--features-csv` and `--artifact` to `predict` subcommand; when both
+  are present, loads artifact with `load_model_artifact()`, reads CSV, calls
+  `predict_probabilities()`, and prints JSON prediction records.
+- Added `_read_csv_safe()` helper that forces `candidate_number`, `draw_date`,
+  `target_date`, and `target_type` columns to string dtype on read, preserving
+  leading zeros.
+- Without new CSV arguments, all three commands retain safe MVP stub messages.
+- Missing/invalid CSV or artifact paths raise clear `SystemExit` errors.
+
+Tests:
+- Updated `tests/test_cli.py` from 37 → 51 tests. Added 14 Phase 7B tests:
+  - Backtest with synthetic history CSV prints summary JSON with brier_score.
+  - Backtest without CSV stays MVP stub.
+  - Backtest with missing CSV fails clearly.
+  - Train with synthetic feature CSV saves artifact to temp dir.
+  - Train without CSV stays MVP stub.
+  - Train with missing CSV fails clearly.
+  - Predict with temp artifact + feature CSV prints prediction JSON.
+  - Predict without CSV stays MVP stub.
+  - Predict without artifact stays MVP stub.
+  - Predict with missing artifact fails clearly.
+  - Predict with missing features CSV fails clearly.
+  - CLI predict preserves "00" and "05" as 2-char strings (loto_2d_all_prizes).
+  - CLI predict preserves "008" and "000" as 3-char strings (db_3cang).
+  - Wired commands do not create the real SQLite database.
+- Synthetic data uses deterministic DataFrames with 40+ dates for backtest
+  and both positive/negative labels for train/predict.
+- Feature columns include: freq_7, freq_14, freq_30, freq_60, freq_90,
+  freq_180, hit_count_sum_30, current_gap, days_since_last_seen,
+  max_gap_before_target, avg_gap_before_target, rolling_hit_rate_30,
+  rolling_hit_rate_90.
+
+Commands run:
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 171 passed (120 existing + 51 CLI).
+
+Blockers and assumptions:
+- No blockers.
+- CSV reading uses pandas `dtype={col: str}` to preserve leading zeros on
+  candidate_number and date columns.
+- All tests use temporary directories only; no real DB or network is touched.
+- scrape, process, and build-features remain MVP stubs.
+
+Recommended next phase:
+- Phase 7C should implement FastAPI endpoints only after explicit approval.
+
+## Phase 7C - FastAPI Minimal Foundation
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented minimal FastAPI foundation only (`/health` and `/targets`).
+- `POST /predict` and `POST /backtest` are explicitly deferred.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+- Ensured graceful fallback and test execution if FastAPI/Pydantic are missing.
+
+Implemented:
+- `xsmb/api/__init__.py`: Package init.
+- `xsmb/api/schemas.py`: Pydantic schemas for `HealthResponse` and `TargetsResponse`
+  (graceful handling of missing `pydantic`).
+- `xsmb/api/routes.py`: FastAPI router with `GET /health` and `GET /targets` endpoints.
+  Returns correct target types preserving project constants.
+- `app/main.py`: Added `create_api_app()` ASGI factory, safely bypassing missing FastAPI
+  so `python -m app.main` CLI execution and tests never break.
+
+Tests:
+- Created `tests/test_api.py`.
+- Tests for `GET /health` HTTP 200, status "ok", and service name.
+- Tests for `GET /targets` HTTP 200 and listing all three target types
+  (`loto_2d_all_prizes`, `db_2cang`, `db_3cang`).
+- Tests gracefully skip if FastAPI is not installed (`HAS_FASTAPI`).
+- All previous CLI and domain test suites remain fully intact and green.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 4 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 175 passed (171 existing + 4 API).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed in implementation code.
+
+Blockers and assumptions:
+- No blockers.
+- `fastapi` and `pydantic` are assumed to be optional dependencies for CLI tools.
+- ASGI entry point `app.main:api_app` is ready.
+
+Recommended next phase:
+- Phase 7D should implement `POST /predict` and `POST /backtest` endpoints only after explicit approval.
+
+## Phase 7D - FastAPI POST /backtest Endpoint
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented `POST /backtest` endpoint only.
+- `POST /predict` remains explicitly deferred.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+
+Implemented:
+- `xsmb/api/schemas.py`: Added Pydantic schemas `BacktestHistoryRow`, `BacktestRequest`,
+  and `BacktestResponse`. Default `min_history_days` is 30, and `top_k_values` is `[5, 10, 20]`.
+- `xsmb/api/routes.py`: Added `POST /backtest` endpoint.
+  - Validates `target_type` against `TARGET_TYPES`.
+  - Validates `model_name` against `SUPPORTED_BASELINES`.
+  - Validates that `history` is not empty, `min_history_days >= 1`, and `top_k_values` are positive integers.
+  - Converts request history to a pandas DataFrame and enforces `candidate_number` as string dtype.
+  - Calls pure function `run_walk_forward_backtest()`.
+  - Returns compact summary and `prediction_count` in `BacktestResponse`.
+  - Captures `ValueError` and raises HTTP 400.
+
+Tests:
+- Updated `tests/test_api.py`.
+- Tests for `POST /backtest`:
+  - Valid payload returns HTTP 200 with `target_type`, `model_name`, `summary`, and `prediction_count`.
+  - Empty history returns 400.
+  - Missing history returns 422.
+  - Invalid `target_type` returns 400.
+  - Invalid `model_name` returns 400.
+  - Invalid `top_k_values` and `min_history_days` return 400.
+  - Leading-zero preservation explicitly verified for `db_3cang` with candidate `"008"`.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 12 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 183 passed (171 existing + 12 API).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed.
+
+Blockers and assumptions:
+- No blockers.
+
+Recommended next phase:
+- Phase 7E should implement `POST /predict` endpoint only after explicit approval.
+
+## Phase 7E - FastAPI POST /predict Endpoint
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented `POST /predict` endpoint only.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+
+Implemented:
+- `xsmb/api/schemas.py`: Added Pydantic schemas `PredictRequest`, `PredictionRow`,
+  and `PredictResponse`. Features are accepted as `List[dict[str, Any]]` to flexibly
+  support variable model feature requirements.
+- `xsmb/api/routes.py`: Added `POST /predict` endpoint.
+  - Validates `target_type` against `TARGET_TYPES`.
+  - Validates `top_k > 0`.
+  - Validates `features` is not empty.
+  - Validates `artifact_path` exists.
+  - Loads model artifact with `load_model_artifact()`.
+  - Checks if artifact `target_type` matches request `target_type`.
+  - Converts request features to pandas DataFrame and explicitly forces `candidate_number` to string to preserve leading zeros forever.
+  - Calls pure function `predict_probabilities()`.
+  - Limits output to `candidate_number`, `probability`, and `rank` to keep response compact.
+
+Tests:
+- Updated `tests/test_api.py`.
+- Tested `POST /predict` using generated artifacts and synthetic feature sets.
+  - Valid payload returns HTTP 200 with probability and rank.
+  - Limits predictions strictly by `top_k`.
+  - Leading-zero preservation successfully tested for `loto_2d_all_prizes` ("00", "05") and `db_3cang` ("008").
+  - Empty features return 422.
+  - Missing artifact path returns 422, non-existent artifact path returns 400.
+  - Mismatched artifact `target_type` returns 400.
+  - Invalid `top_k` returns 422.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 21 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 192 passed (183 existing + 9 new API tests).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed.
+
+Blockers and assumptions:
+- No blockers.
+- The system is now fully functional across both CLI and FastAPI boundaries without network/DB dependencies.
+
+Recommended next phase:
+- Phase 8: Frontend / Streamlit Dashboard implementation.

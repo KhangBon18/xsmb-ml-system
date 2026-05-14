@@ -557,3 +557,50 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 7C should implement FastAPI endpoints only after explicit approval.
+
+## Phase 7C - FastAPI Minimal Foundation
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented minimal FastAPI foundation only (`/health` and `/targets`).
+- `POST /predict` and `POST /backtest` are explicitly deferred.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+- Ensured graceful fallback and test execution if FastAPI/Pydantic are missing.
+
+Implemented:
+- `xsmb/api/__init__.py`: Package init.
+- `xsmb/api/schemas.py`: Pydantic schemas for `HealthResponse` and `TargetsResponse`
+  (graceful handling of missing `pydantic`).
+- `xsmb/api/routes.py`: FastAPI router with `GET /health` and `GET /targets` endpoints.
+  Returns correct target types preserving project constants.
+- `app/main.py`: Added `create_api_app()` ASGI factory, safely bypassing missing FastAPI
+  so `python -m app.main` CLI execution and tests never break.
+
+Tests:
+- Created `tests/test_api.py`.
+- Tests for `GET /health` HTTP 200, status "ok", and service name.
+- Tests for `GET /targets` HTTP 200 and listing all three target types
+  (`loto_2d_all_prizes`, `db_2cang`, `db_3cang`).
+- Tests gracefully skip if FastAPI is not installed (`HAS_FASTAPI`).
+- All previous CLI and domain test suites remain fully intact and green.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 4 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 175 passed (171 existing + 4 API).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed in implementation code.
+
+Blockers and assumptions:
+- No blockers.
+- `fastapi` and `pydantic` are assumed to be optional dependencies for CLI tools.
+- ASGI entry point `app.main:api_app` is ready.
+
+Recommended next phase:
+- Phase 7D should implement `POST /predict` and `POST /backtest` endpoints only after explicit approval.

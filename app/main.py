@@ -327,7 +327,34 @@ _COMMAND_HANDLERS = {
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# API application export (Phase 7C)
+# ---------------------------------------------------------------------------
+
+def create_api_app() -> "FastAPI" | None:
+    """Create and return the FastAPI application instance."""
+    try:
+        from fastapi import FastAPI
+        from xsmb.api.routes import router as api_router
+    except ImportError:
+        return None
+
+    if api_router is None:
+        return None
+
+    app = FastAPI(
+        title="XSMB ML System",
+        description=_DESCRIPTION,
+        version="0.1.0",
+    )
+    app.include_router(api_router)
+    return app
+
+# Expose an instance for ASGI servers (e.g. uvicorn app.main:api_app)
+api_app = create_api_app()
+
+
+# ---------------------------------------------------------------------------
+# CLI Entry point
 # ---------------------------------------------------------------------------
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

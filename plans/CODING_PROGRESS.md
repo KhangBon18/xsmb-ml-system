@@ -257,3 +257,58 @@ Blockers and assumptions:
 Recommended next phase:
 - Phase 4 should build target-processing orchestration or next approved scope
   only after explicit approval.
+
+## Phase 4 - Leakage-Safe Feature Engineering
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only pure feature engineering for target history rows.
+- No baselines, ML train/predict, backtest, API, dashboard, Docker, CLI, or
+  Phase 5 work was implemented.
+
+Implemented:
+- Added frequency feature helpers for `freq_7`, `freq_14`, `freq_30`,
+  `freq_60`, `freq_90`, and `freq_180`.
+- Added `hit_count_sum_30`.
+- Added draw-index gap helpers for `current_gap`, `days_since_last_seen`,
+  `max_gap_before_target`, and `avg_gap_before_target`.
+- Added rolling hit-rate helpers for `rolling_hit_rate_30` and
+  `rolling_hit_rate_90`.
+- Added public `build_feature_dataset(history_df, target_type, start_date=None,
+  end_date=None, min_history_days=30)`.
+- Builder validates required columns, validates supported target types using
+  Phase 1 candidate-space logic, filters by explicit target type, preserves
+  candidate strings/leading zeros, does not mutate caller input, and returns
+  deterministic ordering by target date then candidate number.
+- All features use only rows where `draw_date < target_date`.
+- `min_history_days` uses count of prior available draw dates, not calendar
+  days.
+
+Tests:
+- Added expected-column coverage.
+- Added coverage for all target types: `loto_2d_all_prizes`, `db_2cang`, and
+  `db_3cang`.
+- Added leading-zero preservation checks for `00`, `05`, and `008`.
+- Added explicit no-leakage test where a target-date-only hit must not affect
+  frequency or rolling-rate features.
+- Added hit-count, gap, rolling-rate, min-history, date-filter, input-mutation,
+  deterministic-order, unsupported-target, and missing-column tests.
+
+Commands run:
+- `python3 -m pytest tests/test_features.py -q`
+  - Result: 16 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 79 passed.
+
+Blockers and assumptions:
+- No blockers.
+- Feature rows are generated only for candidate/date rows present in the input
+  history DataFrame. Full 100/1000-row outputs are supported when the input
+  history contains full target rows from Phase 3 ingestion.
+- Feature generation is pure pandas and does not write to the database.
+
+Recommended next phase:
+- Phase 5 should implement baseline ranking models only after explicit
+  approval.

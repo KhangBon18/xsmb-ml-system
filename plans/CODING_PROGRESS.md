@@ -312,3 +312,60 @@ Blockers and assumptions:
 Recommended next phase:
 - Phase 5 should implement baseline ranking models only after explicit
   approval.
+
+## Phase 5 - Baselines, Metrics, and Walk-Forward Backtest
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented only deterministic baselines, evaluation metrics, and pure
+  walk-forward backtest orchestration.
+- No ML train/predict pipelines, logistic regression, tree models, CLI, API,
+  dashboard, Docker, scheduler, or Phase 6 work was implemented.
+
+Implemented:
+- Added supported baselines: `random_uniform`, `frequency_30`,
+  `frequency_90`, and `gap_rank`.
+- Added `score_baseline_candidates(feature_df, model_name)` with deterministic
+  per-date ranking, lexicographic tie-breaking, probability clipping, and
+  string-preserving candidate output.
+- Added evaluation metrics: `brier_score`, `log_loss`, `precision_at_k`,
+  `hit_rate_at_k`, `avg_hits_at_k`, `recall_at_k`, `calibration_by_bucket`,
+  and `evaluate_predictions`.
+- Added `run_walk_forward_backtest()` that builds Phase 4 leakage-safe features,
+  scores baseline predictions, evaluates summary metrics, and returns
+  predictions/calibration DataFrames.
+- Added small report helpers `summarize_backtest_result()` and
+  `predictions_to_records()`.
+- Exported Phase 5 helpers from `xsmb.models`.
+
+Tests:
+- Added baseline tests for uniform probabilities, frequency ranking, gap
+  ranking, leading-zero preservation, unsupported models, and missing columns.
+- Added metric tests for Brier score, clipped log loss, Precision@K,
+  HitRate@K, AvgHits@K, Recall@K, calibration buckets, and summary keys.
+- Added walk-forward tests for all target types, min-history behavior,
+  date-window filtering, required prediction columns, rank starts at 1, and
+  an explicit no-leakage target-date hit case.
+
+Commands run:
+- `python3 -m pytest tests/test_backtest.py -q`
+  - Initial result: 1 failed, 19 passed due to a test assertion using
+    `pytest.approx` inside a set.
+- `python3 -m pytest tests/test_backtest.py -q`
+  - Final result: 20 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 99 passed.
+
+Blockers and assumptions:
+- No blockers.
+- Backtest is time-based through Phase 4 feature generation and does not use
+  random splits.
+- Recall skips dates with no positive labels.
+- Baselines do not use current target labels to create scores/probabilities;
+  labels are used only by evaluation after prediction rows are produced.
+
+Recommended next phase:
+- Phase 6 should implement ML training/prediction models only after explicit
+  approval.

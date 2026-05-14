@@ -604,3 +604,54 @@ Blockers and assumptions:
 
 Recommended next phase:
 - Phase 7D should implement `POST /predict` and `POST /backtest` endpoints only after explicit approval.
+
+## Phase 7D - FastAPI POST /backtest Endpoint
+
+Status: Complete
+Date: 2026-05-14
+
+Scope guard:
+- Implemented `POST /backtest` endpoint only.
+- `POST /predict` remains explicitly deferred.
+- No Streamlit dashboard, Docker, scheduler, broad crawling, network,
+  or real DB work was implemented.
+
+Implemented:
+- `xsmb/api/schemas.py`: Added Pydantic schemas `BacktestHistoryRow`, `BacktestRequest`,
+  and `BacktestResponse`. Default `min_history_days` is 30, and `top_k_values` is `[5, 10, 20]`.
+- `xsmb/api/routes.py`: Added `POST /backtest` endpoint.
+  - Validates `target_type` against `TARGET_TYPES`.
+  - Validates `model_name` against `SUPPORTED_BASELINES`.
+  - Validates that `history` is not empty, `min_history_days >= 1`, and `top_k_values` are positive integers.
+  - Converts request history to a pandas DataFrame and enforces `candidate_number` as string dtype.
+  - Calls pure function `run_walk_forward_backtest()`.
+  - Returns compact summary and `prediction_count` in `BacktestResponse`.
+  - Captures `ValueError` and raises HTTP 400.
+
+Tests:
+- Updated `tests/test_api.py`.
+- Tests for `POST /backtest`:
+  - Valid payload returns HTTP 200 with `target_type`, `model_name`, `summary`, and `prediction_count`.
+  - Empty history returns 400.
+  - Missing history returns 422.
+  - Invalid `target_type` returns 400.
+  - Invalid `model_name` returns 400.
+  - Invalid `top_k_values` and `min_history_days` return 400.
+  - Leading-zero preservation explicitly verified for `db_3cang` with candidate `"008"`.
+
+Commands run:
+- `python3 -m pytest tests/test_api.py -q`
+  - Result: 12 passed.
+- `python3 -m pytest tests/test_cli.py -q`
+  - Result: 51 passed.
+- `python3 -m pytest tests/ -q`
+  - Result: 183 passed (171 existing + 12 API).
+- Checked for forbidden language (`grep` for "guaranteed", etc.)
+  - Result: No forbidden predictions claimed.
+
+Blockers and assumptions:
+- No blockers.
+
+Recommended next phase:
+- Phase 7E should implement `POST /predict` endpoint only after explicit approval.
+

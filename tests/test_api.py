@@ -51,3 +51,107 @@ class TestTargetsEndpoint:
         assert "loto_2d_all_prizes" in targets
         assert "db_2cang" in targets
         assert "db_3cang" in targets
+
+
+def _make_history_payload(num_dates: int = 35, target_type: str = "loto_2d_all_prizes", include_008: bool = False) -> list[dict[str, str | int]]:
+    from datetime import date, timedelta
+    base = date(2024, 1, 1)
+    rows = []
+    candidates = ["00", "05", "10", "55"]
+    if include_008:
+        candidates.append("008")
+    for day_offset in range(num_dates):
+        draw_date = (base + timedelta(days=day_offset)).isoformat()
+        for candidate in candidates:
+            label = 1 if (int(candidate) % 10) == (day_offset % 10) else 0
+            rows.append({
+                "draw_date": draw_date,
+                "target_type": target_type,
+                "candidate_number": candidate,
+                "label": label,
+                "hit_count": label,
+            })
+    return rows
+
+
+class TestBacktestEndpoint:
+    def test_backtest_returns_200_and_summary(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "frequency_30",
+            "history": _make_history_payload(num_dates=35)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["target_type"] == "loto_2d_all_prizes"
+        assert data["model_name"] == "frequency_30"
+        assert "summary" in data
+        assert "brier_score" in data["summary"]
+        assert "prediction_count" in data
+        assert data["prediction_count"] > 0
+
+    def test_backtest_leading_zero_preservation(self, client):
+        payload = {
+            "target_type": "db_3cang",
+            "model_name": "frequency_30",
+            "history": _make_history_payload(num_dates=35, target_type="db_3cang", include_008=True)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code == 200
+
+    def test_backtest_missing_history_returns_422(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "frequency_30"
+            # Missing history
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code == 422
+
+    def test_backtest_empty_history_returns_400(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "frequency_30",
+            "history": []
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code in (400, 422)
+
+    def test_backtest_invalid_target_type(self, client):
+        payload = {
+            "target_type": "invalid_type",
+            "model_name": "frequency_30",
+            "history": _make_history_payload(num_dates=5)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code in (400, 422)
+
+    def test_backtest_invalid_model_name(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "invalid_model",
+            "history": _make_history_payload(num_dates=5)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code in (400, 422)
+
+    def test_backtest_invalid_top_k_values(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "frequency_30",
+            "top_k_values": [5, -1, 10],
+            "history": _make_history_payload(num_dates=5)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code in (400, 422)
+
+    def test_backtest_invalid_min_history_days(self, client):
+        payload = {
+            "target_type": "loto_2d_all_prizes",
+            "model_name": "frequency_30",
+            "min_history_days": 0,
+            "history": _make_history_payload(num_dates=5)
+        }
+        response = client.post("/backtest", json=payload)
+        assert response.status_code in (400, 422)
